@@ -7,43 +7,9 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#include "sha1.h"
-
 #define MAX_MSG_LENGTH 2048
-/*
-unsigned int hash(char *key) {
-	SHA1Context sha;
-	unsigned int result = 0;
-	//printf("Hash value: %s\n", key);
-	SHA1Reset(&sha);
-	SHA1Input(&sha, (const unsigned char*)key, strlen(key));
 
-	if ((SHA1Result(&sha)) == 0) {
-		printf("fail to compute message digest!\n");
-	} else {
-		result = sha.Message_Digest[0] ^ sha.Message_Digest[1];
-    
-    	int i=2;
-
-		for (i = 2; i < 5; i++) {
-      		result = result ^ sha.Message_Digest[i];
-		}
-	}
-  	return result;
-}
-*/
 unsigned int get_hash(int port) {
-	/*char *str;
-	char *strPort;
-
-	str = (char *) malloc(30 * sizeof(char));
-	strPort = (char *) malloc(20 * sizeof(char));
-	//strcat(str,"127.0.0.1:");
-	strcpy(str, "127.0.0.1:");
-	sprintf(strPort, "%d", port);
-	strcat(str, strPort);
-
-	return hash(str); */
 	return (port % 100);
 }
 
@@ -57,15 +23,17 @@ int main(int argc, char* argv[]) {
 
 	part = (char *) malloc(50*sizeof(char));
 	
-	printf("Please enter node info (query [IP address] [port]):\n");
+	//printf("Please enter node info (query [IP address] [port]):\n");
+	printf("Por favor, entre com as informacoes de endereco IP e Porta \n(remove-no [IP address] [port]):\n");
 	fgets(cmd, 50, stdin);
 	memset(part, 0, 50);
 
 	part = strtok(cmd, token);
 
-	while (strcmp(part, "query")) {
+	while (strcmp(part, "remove-no")) {
 		memset(cmd, 0, 50);
-		printf("Incorrect command, please input again (query [IP address] [port]):\n");
+		// printf("Incorrect command, please input again (query [IP address] [port]):\n");
+		printf("Comando incorreto! \nPor favor, entre com as informacoes de endereco IP e Porta \n(insere-no [IP address] [port]):\n");
 		fgets(cmd, 50, stdin);
 		part = strtok(cmd, token);
 	}
@@ -109,8 +77,8 @@ int main(int argc, char* argv[]) {
 	strcat(str, strPort);
 
 	// printf("Connection to node 127.0.0.1, port %d, position 0x%X\n", port, hash(str));
-	printf("Connection to node 127.0.0.1, port %d, position %d\n", port, get_hash(port));
-	memcpy(msg, "query", sizeof("query"));
+	printf("Conectando ao no 127.0.0.1, porta %d, identificador %d\n", port, get_hash(port));
+	memcpy(msg, "remove-no", sizeof("remove-no"));
 	
 	if (send(sock, msg, sizeof(msg), 0) < 0) {
 		perror("Falha no envio (send)!");
@@ -124,14 +92,14 @@ int main(int argc, char* argv[]) {
 		memset(reply, 0, MAX_MSG_LENGTH);
 		
 		// printf("Please enter your search key (or type 'quit' to leave):\n");
-		printf("Por favor, entre com o indentificador a ser inserido (ou 'sair' para deixar a aplicacao):\n");
+		printf("Por favor, entre com o indentificador a ser removido (ou 'sair' para deixar a aplicacao):\n");
 		fgets(msg, MAX_MSG_LENGTH,stdin);
 
 		if (!strcmp(msg, "sair\n")) break;
 
 		msg[sizeof(msg)-1] = '\0';
 		// printf("%sHash value is 0x%X\n", msg, hash(msg));
-		printf("O objeto desejado possui o indentificador %s\n", msg);
+		printf("O objeto que se deseja remover possui o indentificador %s\n", msg);
 		
 		if ((send(sock, msg, sizeof(msg),0)) < 0) {
 			perror("Send error: ");
@@ -153,7 +121,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	// printf("Query Terminated\n");
-	printf("Consulta finalizada!\n");
+	printf("Remocoes finalizadas!\n");
 
 	return 0;
 }

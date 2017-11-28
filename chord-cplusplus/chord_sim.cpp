@@ -344,7 +344,7 @@ int unisend(char* message, char* serverport, int flag)
 
 
 //Master node, each node is a pthread handles request from other nodes or client
-void* node_init(void * arg){
+void *node_init(void * arg){
 	/*init all finger table, key for Node 0*/
 	int node_num = atoi((char*) arg);
 	pthread_detach(pthread_self()); // no join() required

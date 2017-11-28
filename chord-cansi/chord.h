@@ -1,9 +1,10 @@
 #ifndef CHORD_H_
 #define CHORD_H_
 
-#define MAX_MSG_LENGTH 2048
+#define MAX_MSG_LENGTH 	2048
+#define MBITS 			7
 
-typedef struct _cNode * pcNode;
+typedef struct _cNode *pcNode;
 
 pcNode suc;
 pcNode suc2;
@@ -14,14 +15,16 @@ typedef struct _fingerTable {
 	pcNode nodeInfo;
 } fTable;
 
-fTable fingerTable[32];
+fTable fingerTable[MBITS];
 
 typedef struct _cNode {
 	unsigned int key;
 	int port;
 } cNode;
 
-cNode localNode;
+cNode node;
+
+int chaves[128];
 
 char *addr = "127.0.0.1";
 

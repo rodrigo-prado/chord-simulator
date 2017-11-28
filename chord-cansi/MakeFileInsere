@@ -1,0 +1,5 @@
+query: query.c
+	gcc -pedantic -Werror -Wall -std=gnu99 -o insere insere.c -lm
+
+clean:
+	rm *~

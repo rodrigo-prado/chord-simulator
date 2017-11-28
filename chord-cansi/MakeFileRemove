@@ -1,0 +1,5 @@
+query: query.c
+	gcc -pedantic -Werror -Wall -std=gnu99 -o remove remove.c -lm
+
+clean:
+	rm *~

@@ -1,10 +1,3 @@
-/*
- * chord.c
- *
- *  Created on: Mar 17, 2015
- *      Author: boyangxu
- */
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,61 +9,33 @@
 #include <sys/time.h>
 #include <pthread.h>
 
-#include "sha1.h"
 #include "chord.h"
 
-/*unsigned int hash(char *key) {
-  SHA1Context sha;
-  unsigned int result = 0;
-  SHA1Reset(&sha);
-  SHA1Input(&sha, (const unsigned char*)key, strlen(key));
-
-  if ((SHA1Result(&sha)) == 0) {
-    printf("fail to compute message digest!\n");
-  } else {
-    result = sha.Message_Digest[0] ^ sha.Message_Digest[1];
-    int i=2;
-    for (i = 2; i < 5; i++) {
-      result = result ^ sha.Message_Digest[i];
-    }
-  }
-  return result;
-}*/
-
 unsigned int get_hash(int port) {
-	/*char *str;
-	char *strPort;
-
-	str = (char *) malloc(30 * sizeof(char));
-	strPort = (char *) malloc(20 * sizeof(char));
-	//strcat(str,"127.0.0.1:");
-	strcpy(str, "127.0.0.1:");
-	sprintf(strPort, "%d", port);
-	strcat(str, strPort);
-
-	return hash(str); */
 	return (port % 100);
 }
 
-int find(unsigned int hashValue) {
-	if(hashValue == localNode.key){
-		return localNode.port;
-	} else if ((hashValue > localNode.key) && (hashValue <= suc->key)) {
+int find(unsigned int value) {
+
+	if (value == node.key) {
+		return node.port;
+	} else if ((value > node.key) && (value <= suc->key)) {
 		return suc->port;
-	} else if (((hashValue > localNode.key) || (hashValue < suc->key))
-			&& (localNode.key > suc->key)){
+	} else if (((value > node.key) || (value < suc->key))
+			&& (node.key > suc->key)){
 		return suc->port;
 	} else {
 		int i;
-	    for (i = 31; i >= 0; i--) {
-			if (((localNode.key < fingerTable[i].nodeInfo->key) &&
-						(fingerTable[i].nodeInfo->key < hashValue))
+
+	    for (i = MBITS-1; i >= 0; i--) {
+			if (((node.key < fingerTable[i].nodeInfo->key) &&
+						(fingerTable[i].nodeInfo->key < value))
 					||
-					((hashValue < localNode.key) &&
-							(fingerTable[i].nodeInfo->key > localNode.key))
+					((value < node.key) &&
+							(fingerTable[i].nodeInfo->key > node.key))
 					||
-					((hashValue < localNode.key) &&
-							(fingerTable[i].nodeInfo->key < hashValue))) {
+					((value < node.key) &&
+							(fingerTable[i].nodeInfo->key < value))) {
 				int sock;
 				struct sockaddr_in server_addr;
 				char msg[MAX_MSG_LENGTH], reply[MAX_MSG_LENGTH];
@@ -89,15 +54,15 @@ int find(unsigned int hashValue) {
 					return 0;
 				}
 
-				memset(msg,0,sizeof(msg));
-				sprintf(msg,"find %u",hashValue);
+				memset(msg, 0, sizeof(msg));
+				sprintf(msg, "find %u", value);
 
 				if (send(sock, msg, MAX_MSG_LENGTH, 0) < 0) {
-				    perror("Send error:");
+				    perror("Falha no envio (send)!");
 				    return 0;
 				}
 
-				memset(reply,0,sizeof(reply));
+				memset(reply, 0, sizeof(reply));
 				if (recv(sock, reply, MAX_MSG_LENGTH, 0) < 0) {
 					perror("Recv error: ");
 					return 0;
@@ -110,7 +75,7 @@ int find(unsigned int hashValue) {
 			}
 	    }
     }
-	return localNode.port;
+	return node.port;
 }
 
 void fix_fingers(int i) {
@@ -119,7 +84,7 @@ void fix_fingers(int i) {
 	result = find(fingerTable[i].start);
 
 	while (result == 0) {
-		result=find(fingerTable[i].start);
+		result = find(fingerTable[i].start);
 	}
 
 	fingerTable[i].nodeInfo->port = result;
@@ -129,7 +94,10 @@ void fix_fingers(int i) {
 void notify() {
 	int sock;
 	struct sockaddr_in server_addr;
-	char msg[MAX_MSG_LENGTH];
+	char msg[MAX_MSG_LENGTH], reply[MAX_MSG_LENGTH];
+
+	memset(reply, 0, sizeof(msg));
+
 
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("Nao foi possivel a criacao do socket!");
@@ -140,27 +108,45 @@ void notify() {
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(suc->port);
 
-	if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+	if (connect(sock, (struct sockaddr*) &server_addr, sizeof(server_addr)) < 0) {
 		suc->port = suc2->port;
 		suc->key = get_hash(suc->port);
-		suc2->port = localNode.port;
+		suc2->port = node.port;
 		suc2->key = get_hash(suc2->port);
 		server_addr.sin_port = htons(suc->port);
 		reset_pre(suc->port);
 
-		if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+		if (connect(sock, (struct sockaddr*) &server_addr, sizeof(server_addr)) < 0) {
 			perror("Falha para conectar a uma porta via socket!");
 			return;
 		}
 	}
 
 	memset(msg, 0, sizeof(msg));
-	sprintf(msg,"notify %d",localNode.port);
+	sprintf(msg, "notify %d", node.port);
 
 	if (send(sock, msg, MAX_MSG_LENGTH, 0) < 0) {
-	    perror("Send error:");
+	    perror("Falha no envio (send)!");
 	    return;
 	}
+
+	if ((read(sock, reply, MAX_MSG_LENGTH)) < 0) {
+    	perror("Recv error: ");
+	   	return;
+	}
+	int indice = atoi(reply);
+	while (indice != -1) {
+		//printf("\nindice: %d\n\n", indice);
+		chaves[indice] = 1;
+
+		//fflush(stdin);
+	    if ((read(sock, reply, MAX_MSG_LENGTH)) < 0) {
+	    	perror("Recv error: ");
+		   	return;
+		}
+		indice = atoi(reply);
+	}
+
 	close(sock);
 }
 
@@ -173,6 +159,7 @@ void stabilize() {
 		perror("Nao foi possivel a criacao do socket!");
 	    return;
 	}
+
 	server_addr.sin_addr.s_addr = inet_addr(addr);
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(suc->port);
@@ -180,7 +167,7 @@ void stabilize() {
 	if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
 		suc->port = suc2->port;
 		suc->key = get_hash(suc->port);
-		suc2->port = localNode.port;
+		suc2->port = node.port;
 		suc2->key = get_hash(suc2->port);
 		server_addr.sin_port = htons(suc->port);
 		reset_pre(suc->port);
@@ -192,10 +179,10 @@ void stabilize() {
 	}
 
 	memset(msg, 0, sizeof(msg));
-	sprintf(msg,"stable %d",localNode.port);
+	sprintf(msg,"stable %d",node.port);
 
 	if (send(sock, msg, MAX_MSG_LENGTH, 0) < 0) {
-	    perror("Send error:");
+	    perror("Falha no envio (send)!");
 	    return;
 	}
 
@@ -212,11 +199,11 @@ void stabilize() {
 	recvHash = get_hash(recvPort);
 
 	if (recvPort > 0) {
-	    if ((suc->key > localNode.key) && (localNode.key < recvHash) && (recvHash < suc->key)) {
+	    if ((suc->key > node.key) && (node.key < recvHash) && (recvHash < suc->key)) {
 	    	suc->port = recvPort;
 	    	suc->key = get_hash(suc->port);
-	    } else if ((suc->key < localNode.key) && (recvPort!=localNode.port) &&
-	    		((recvHash > localNode.key) || (recvHash < suc->key))) {
+	    } else if ((suc->key < node.key) && (recvPort!=node.port) &&
+	    		((recvHash > node.key) || (recvHash < suc->key))) {
 	    	suc->port = atoi(reply);
 	    	suc->key = get_hash(suc->port);
 	    }
@@ -247,7 +234,7 @@ void reset_pre(int port) {
 	sprintf(msg,"reset-pre");
 
 	if (send(sock, msg, MAX_MSG_LENGTH, 0) < 0) {
-	    perror("Send error:");
+	    perror("Falha no envio (send)!");
 	    return;
 	}
 	close(sock);
@@ -259,7 +246,7 @@ void keep_alive() {
 		struct sockaddr_in server_addr;
 		char msg[MAX_MSG_LENGTH];
 
-		if((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+		if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 			perror("Nao foi possivel a criacao do socket!");
 		    return;
 		}
@@ -279,7 +266,7 @@ void keep_alive() {
 		sprintf(msg, "keep-alive %d", suc->port);
 
 		if (send(sock, msg, MAX_MSG_LENGTH, 0) < 0) {
-		    perror("Send error:");
+		    perror("Falha no envio (send)!");
 		    return;
 		}
 
@@ -290,7 +277,7 @@ void keep_alive() {
 void *update() {
 	int i;
 	while (1) {
-		for (i = 0; i < 32; i++) {
+		for (i = 0; i < MBITS; i++) {
 			fix_fingers(i);
 		}
 		sleep(1);
@@ -302,12 +289,55 @@ void *update() {
 }
 
 void *command() {
-	char* cmd;
+	char *cmd;
+
 	cmd = (char *) malloc(MAX_MSG_LENGTH*sizeof(char));
 	memset(cmd, 0, MAX_MSG_LENGTH);
-	while (strcmp(cmd, "kill")) {
+	while (strcmp(cmd, "remover")) {
 		fscanf(stdin, "%s", cmd);
 	}
+
+	printf("\n\nSaindo do remover!\n");
+
+	for (int i = 0; i < 128; ++i) {
+		if (chaves[i]) {
+
+			int sock;
+			struct sockaddr_in server_addr;
+			char msg[MAX_MSG_LENGTH], reply[MAX_MSG_LENGTH];
+
+			if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+				perror("Nao foi possivel a criacao do socket!");
+			    return 0;
+			}
+
+			server_addr.sin_addr.s_addr = inet_addr(addr);
+			server_addr.sin_family = AF_INET;
+			server_addr.sin_port = htons(suc->port);
+
+			if (connect(sock, (struct sockaddr*) &server_addr, sizeof(server_addr)) < 0) {
+				perror("Falha para conectar a uma porta via socket!");
+				return 0;
+			}
+		
+			memset(msg, 0, sizeof(msg));
+			sprintf(msg, "insere-no %u", i);
+
+			if (send(sock, msg, MAX_MSG_LENGTH, 0) < 0) {
+			    perror("Falha no envio (send)!");
+			    return 0;
+			}
+
+			memset(reply, 0, sizeof(reply));
+			if (recv(sock, reply, MAX_MSG_LENGTH, 0) < 0) {
+				perror("Recv error: ");
+				return 0;
+			}
+
+			close(sock);
+		}
+	}
+
 	exit(0);
 }
 
@@ -328,36 +358,59 @@ void *chordNode(void *sock) {
 
     	if (!strcmp(cmd, "join")) {
     		cmd = strtok(NULL, token);
-    		pcNode n;
-    		n = (pcNode)malloc(sizeof(cNode));
-    		n->port = atoi(cmd);
-    		n->key = get_hash(n->port);
+			pcNode n;
+			n = (pcNode) malloc(sizeof(cNode));
+			n->port = atoi(cmd);
+			n->key = get_hash(n->port);
 
-    		if (suc->port == localNode.port) {
-    			suc->port=n->port;
-        		suc->key = get_hash(suc->port);
-   	    		pre->port = n->port;
-   	    		pre->key = get_hash(pre->port);
-   	    		result = localNode.port;
-    		} else {
-    			result = find(n->key);
-    			while (result == 0) {
-    				result=find(n->key);
-    			}
-    		}
+			if (suc->port == node.port) {
 
-	    	memset(reply, 0, MAX_MSG_LENGTH);
-	    	sprintf(reply, "%d", result);
+				suc->port=n->port;
+				suc->key = get_hash(suc->port);
 
-	    	if (send(rqst, reply, MAX_MSG_LENGTH, 0) < 0) {
-	    		perror("Send error: ");
-	    		return NULL;
-	    	}
+				pre->port = n->port;
+				pre->key = get_hash(pre->port);
+
+				result = node.port;
+			} else {
+				result = find(n->key);
+				while (result == 0) {
+					result = find(n->key);
+				}
+			}
+
+			memset(reply, 0, MAX_MSG_LENGTH);
+			sprintf(reply, "%d", result);
+
+			if (send(rqst, reply, MAX_MSG_LENGTH, 0) < 0) {
+				perror("Falha no envio (send)!");
+				return NULL;
+			}
+
+			for (int i = 0; i < 128; ++i) {
+				if (chaves[i]) {
+					memset(reply, 0, MAX_MSG_LENGTH);
+					sprintf(reply, "%d", i);
+					if (send(rqst, reply, MAX_MSG_LENGTH, 0) < 0) {
+						perror("Falha no envio (send)!");
+						return NULL;
+					}
+					chaves[i] = 0;
+				}
+			}
+
+			memset(reply, 0, MAX_MSG_LENGTH);
+			sprintf(reply, "%d", -1);
+			if (send(rqst, reply, MAX_MSG_LENGTH, 0) < 0) {
+				perror("Falha no envio (send)!");
+				return NULL;
+			}
+			
     	} else if (!strcmp(cmd, "find")) {
     		cmd = strtok(NULL, token);
     		unsigned int findHash;
-    		findHash = atoi(cmd);
-    		result = find(findHash);
+			findHash = atoi(cmd);
+			result = find(findHash);
 
     		while (result == 0) {
     			result = find(findHash);
@@ -366,7 +419,7 @@ void *chordNode(void *sock) {
     		sprintf(reply, "%d", result);
 
     		if (send(rqst, reply, MAX_MSG_LENGTH, 0) < 0) {
-    			perror("Send error: ");
+    			perror("Falha no envio (send)!");
         		return NULL;
     	   	}
     	} else if (!strcmp(cmd, "query")) {
@@ -380,10 +433,10 @@ void *chordNode(void *sock) {
     				result = find(mHash);
     			}
 
-    			sprintf(reply,"%d",result);
+    			sprintf(reply, "%d", result);
 
     			if (send(rqst, reply, MAX_MSG_LENGTH, 0) < 0) {
-    				perror("Send error: ");
+    				perror("Falha no envio (send)!");
     				return NULL;
     			}
     		}
@@ -397,35 +450,181 @@ void *chordNode(void *sock) {
     		}
 
     		if (send(rqst, reply, MAX_MSG_LENGTH, 0) < 0) {
-    			perror("Send error: ");
+    			perror("Falha no envio (send)!");
     			return NULL;
     	    }
     		break;
-    	} else if(!strcmp(cmd,"notify")) {
+    	} else if(!strcmp(cmd, "notify")) {
     		cmd = strtok(NULL, token);
     		result = atoi(cmd);
     		
+    		int inicio;
+    		int fim;
+
     		if (pre == NULL) {
     			pre = (pcNode) malloc(sizeof(cNode));
     			pre->port = result;
     			pre->key = get_hash(pre->port);
-    		} else if ((pre->key < localNode.key) && (pre->key < get_hash(result)) && (get_hash(result) < localNode.key)) {
-    			pre->port = result;
-    			pre->key=get_hash(pre->port);
-    		} else if ((pre->key > localNode.key) &&
-    				((get_hash(result) > pre->key) || (get_hash(result) < localNode.key))){
+    		} else if ((pre->key < node.key) && (pre->key < get_hash(result)) && (get_hash(result) < node.key)) {
     			pre->port = result;
     			pre->key = get_hash(pre->port);
+    		} else if ((pre->key > node.key) &&
+    				((get_hash(result) > pre->key) || (get_hash(result) < node.key))) {
+				pre->port = result;
+    			pre->key = get_hash(pre->port);
     		}
+
+			inicio = node.key;
+			fim = pre->key;
+
+			while (inicio != fim) {
+				inicio = (inicio + 1) % 128;
+				if (chaves[inicio]) {
+					memset(reply, 0, MAX_MSG_LENGTH);
+					sprintf(reply, "%d", inicio);
+					if (send(rqst, reply, MAX_MSG_LENGTH, 0) < 0) {
+						perror("Falha no envio (send)!");
+						return NULL;
+					}
+					chaves[inicio] = 0;
+				}
+			}
+
+			memset(reply, 0, MAX_MSG_LENGTH);
+			sprintf(reply, "%d", -1);
+			if (send(rqst, reply, MAX_MSG_LENGTH, 0) < 0) {
+				perror("Falha no envio (send)!");
+				return NULL;
+			}
+
     	} else if (!strcmp(cmd, "keep-alive")) {
-    		cmd = strtok(NULL,token);
+    		cmd = strtok(NULL, token);
     		result = atoi(cmd);
     		suc2->port = result;
     		suc2->key = get_hash(suc2->port);
     	} else if (!strcmp(cmd, "reset-pre")) {
     		free(pre);
     		pre = NULL;
-    	}
+    	} else if (!strcmp(cmd, "insere-no")) {
+    		while ((recv(rqst, msg, MAX_MSG_LENGTH, 0)) > 0) {
+	    		
+				unsigned int mHash;
+    			mHash = atoi(msg);
+    			result = find(mHash);
+
+	    		while (result == 0) {
+	    			result = find(mHash);
+	    		}
+
+	    		sprintf(reply, "%d", result);
+	    		if (node.port == result) {
+	    			chaves[mHash] = 1;
+	    		} else {
+	    			int sock;
+					struct sockaddr_in server_addr;
+					char msg[MAX_MSG_LENGTH], reply[MAX_MSG_LENGTH];
+
+					if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+						perror("Nao foi possivel a criacao do socket!");
+					    return 0;
+					}
+
+					server_addr.sin_addr.s_addr = inet_addr(addr);
+					server_addr.sin_family = AF_INET;
+					server_addr.sin_port = htons(result);
+
+					if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+						perror("Falha para conectar a uma porta via socket!");
+						return 0;
+					}
+
+					memset(msg, 0, sizeof(msg));
+					sprintf(msg, "insere-no %u", mHash);
+
+					if (send(sock, msg, MAX_MSG_LENGTH, 0) < 0) {
+					    perror("Falha no envio (send)!");
+					    return 0;
+					}
+
+					memset(reply, 0, sizeof(reply));
+					if (recv(sock, reply, MAX_MSG_LENGTH, 0) < 0) {
+						perror("Recv error: ");
+						return 0;
+					}
+	    		}
+
+	    		if (send(rqst, reply, MAX_MSG_LENGTH, 0) < 0) {
+	    			perror("Falha no envio (send)!");
+	        		return NULL;
+	    	   	}
+    	   	}
+    	} else if (!strcmp(cmd, "remove-no")) {
+    		while ((recv(rqst, msg, MAX_MSG_LENGTH, 0)) > 0) {
+	    		
+				unsigned int mHash;
+    			mHash = atoi(msg);
+    			result = find(mHash);
+
+	    		while (result == 0) {
+	    			result = find(mHash);
+	    		}
+
+	    		sprintf(reply, "%d", result);
+	    		
+	    		if (node.port == result) {
+	    			chaves[mHash] = 0;
+	    		} else {
+	    			int sock;
+					struct sockaddr_in server_addr;
+					char msg[MAX_MSG_LENGTH], reply[MAX_MSG_LENGTH];
+
+					if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+						perror("Nao foi possivel a criacao do socket!");
+					    return 0;
+					}
+
+					server_addr.sin_addr.s_addr = inet_addr(addr);
+					server_addr.sin_family = AF_INET;
+					server_addr.sin_port = htons(result);
+
+					if (connect(sock, (struct sockaddr*)&server_addr, sizeof(server_addr)) < 0) {
+						perror("Falha para conectar a uma porta via socket!");
+						return 0;
+					}
+
+					memset(msg, 0, sizeof(msg));
+					sprintf(msg, "insere-no %u", mHash);
+
+					if (send(sock, msg, MAX_MSG_LENGTH, 0) < 0) {
+					    perror("Falha no envio (send)!");
+					    return 0;
+					}
+
+					memset(reply, 0, sizeof(reply));
+					if (recv(sock, reply, MAX_MSG_LENGTH, 0) < 0) {
+						perror("Recv error: ");
+						return 0;
+					}
+	    		}
+
+	    		if (send(rqst, reply, MAX_MSG_LENGTH, 0) < 0) {
+	    			perror("Falha no envio (send)!");
+	        		return NULL;
+	    	   	}
+    	   	}
+    	} /* else if (!strcmp(cmd, "adiciona-no")) {
+    		printf("\nRecebendo adicao\n\n");
+    		cmd = strtok(NULL, token);
+    		result = atoi(cmd);
+    		
+    		chaves[get_hash(result)] = 1;
+    	}/ * else if (!strcmp(cmd, "elimina-no")) {
+    		printf("\nRecebendo eliminacao. \n\n");
+    		cmd = strtok(NULL, token);
+    		result = atoi(cmd);
+    		
+    		chaves[get_hash(result)] = 0;
+    	}*/
     	memset(msg, 0, sizeof(msg));
 	}
 	close(rqst);
@@ -435,8 +634,8 @@ void *chordNode(void *sock) {
 int main(int argc, char *argv[]) {
 	void *self;
 
-	localNode.key = 0;
-	localNode.port = 0;
+	node.key = 0;
+	node.port = 0;
 
 	suc = (pcNode) malloc(sizeof(cNode));
 	suc2 = (pcNode) malloc(sizeof(cNode));
@@ -448,28 +647,34 @@ int main(int argc, char *argv[]) {
 	
 	int joinPort;
 
+	for (int i; i < 128; ++i) {
+		chaves[i] = 0;
+	}
+
 	cmd = (char*) malloc(512*sizeof(char));
 	part = (char*) malloc(512*sizeof(char));
 
-	printf("Input command:\n");
+	// printf("Input command:\n");
+	printf("Entre com o comando:\n");
 	fgets(cmd, 512, stdin);
 
 	part = strtok(cmd, token);
 	part = strtok(NULL, token);
 
-	localNode.port = atoi(part);
-	localNode.key = get_hash(localNode.port);
+	node.port = atoi(part);
+	node.key = get_hash(node.port);
 
 	part = strtok(NULL, token);
 
+	// Create Finger Table
 	int i;
-	for (i = 0; i < 32; i++) {
-		fingerTable[i].start = localNode.key + pow(2, i);
+	for (i = 0; i < MBITS; i++) {
+		fingerTable[i].start = node.key + pow(2, i);
 		fingerTable[i].nodeInfo = (pcNode) malloc(sizeof(cNode));
-		fingerTable[i].nodeInfo->port = localNode.port;
+		fingerTable[i].nodeInfo->port = node.port;
 		fingerTable[i].nodeInfo->key = get_hash(fingerTable[i].nodeInfo->port);
 	}
-	suc2->port = localNode.port;
+	suc2->port = node.port;
 	suc2->key = get_hash(suc2->port);
 
 	if (part == NULL) {
@@ -496,7 +701,7 @@ int main(int argc, char *argv[]) {
 
 	my_addr.sin_family = AF_INET;
 	my_addr.sin_addr.s_addr = INADDR_ANY;
-	my_addr.sin_port = htons(localNode.port);
+	my_addr.sin_port = htons(node.port);
 
 	if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 		perror("Nao foi possivel a criacao do socket!");
@@ -542,10 +747,10 @@ int main(int argc, char *argv[]) {
 
 void newNode() {
 	pre = (pcNode) malloc(sizeof(cNode));
-	suc->key = localNode.key;
-	suc->port = localNode.port;
-	pre->key = localNode.key;
-	pre->port = localNode.port;
+	suc->key = node.key;
+	suc->port = node.port;
+	pre->key = node.key;
+	pre->port = node.port;
 }
 
 void joinNode(int joinPort) {
@@ -557,7 +762,7 @@ void joinNode(int joinPort) {
 	printf("Juntando a uma rede anel do tipo Chord existente!\n");
 	// printf("Joining the Chord ring.\n");
 
-	sprintf(msg, "join %d", localNode.port);
+	sprintf(msg, "join %d", node.port);
 
 	int sock;
 
@@ -578,7 +783,7 @@ void joinNode(int joinPort) {
 	}
 
 	if (send(sock, msg, sizeof(msg), 0) < 0) {
-		perror("Send error: ");
+		perror("Falha no envio (send)!");
 		return;
 	}
 
@@ -592,6 +797,24 @@ void joinNode(int joinPort) {
     suc->port = atoi(reply);
 	suc->key = get_hash(suc->port);
 
+	//fflush(stdin);
+    if ((read(sock, reply, MAX_MSG_LENGTH)) < 0) {
+    	perror("Recv error: ");
+	   	return;
+	}
+	int indice = atoi(reply);
+	while (indice != -1) {
+		//printf("\nindice: %d\n\n", indice);
+		chaves[indice] = 1;
+
+		//fflush(stdin);
+	    if ((read(sock, reply, MAX_MSG_LENGTH)) < 0) {
+	    	perror("Recv error: ");
+		   	return;
+		}
+		indice = atoi(reply);
+	}
+
 	close(sock);
 }
 
@@ -599,23 +822,47 @@ void *print_node() {
 	while (1) {
 		sleep(5);
 		if (pre == NULL) continue;
-		// printf("Porta: %d\n", port);
-		// printf("ID do no: %d\n", node_id);
-		printf("Porta: %d\n", localNode.port);
-		printf("Identificador do no: %d\n", localNode.key);
+		printf("--------------------------------------------------------------------------------");
+		printf("Porta: %d\n", node.port);
+		printf("Identificador do no: %d\n", node.key);
 		printf("Sucessor: IP 127.0.0.1, porta %d, identificador %d.\n", suc->port, suc->key);
 		printf("Predecessor: IP 127.0.0.1, porta %d, identificador %d.\n", pre->port, pre->key);
-		printf("Insira 'kill' para remover o no.\n");
-		// printf("You are listening on port %d.\n", localNode.port);
-		/* printf("Your position is 0x%X.\n", localNode.key);
-		printf("Your predecessor is node 127.0.0.1, port %d, position 0x%X.\n", pre->port, pre->key);
-		printf("Your successor is node 127.0.0.1, port %d, position 0x%X.\n", suc->port, suc->key);*/
-		// printf("Your position is %d.\n", localNode.key);
-		// printf("Your predecessor is node 127.0.0.1, port %d, position %d.\n", pre->port, pre->key);
-		// printf("Your successor is node 127.0.0.1, port %d, position %d.\n", suc->port, suc->key);
-		/*for(i=0;i<32;i++){
-			printf("\tFingerTable[%d] is 0x%X | %d\n", i, fingerTable[i].start, fingerTable[i].nodeInfo->port);
-		}*/
-		// printf("Input 'kill' to close the node.\n");
+		printf("Finger Table: ");
+		for (int i = 0; i < MBITS; i++) {
+			if (i < MBITS-1)
+				printf("%d, ", fingerTable[i].nodeInfo->key);
+			else
+				printf("%d.\n", fingerTable[i].nodeInfo->key);
+		}
+		printf("Chaves: ");
+		
+		int primeiro = 1;
+		if (pre->key == node.key) {
+			for (int i = 0; i < 128; i++) {
+				if (chaves[i]) {
+					if (primeiro) {
+						printf("%d", i);
+						primeiro = 0;
+					} else {
+						printf(", %d", i);
+					}
+				}
+			}
+		} else {
+			int indice = pre->key;
+			while (indice != node.key) {
+				indice = (indice + 1) % 128;
+				if (chaves[indice]) {
+					if (primeiro) {
+						printf("%d", indice);
+						primeiro = 0;
+					} else {
+						printf(", %d", indice);
+					}
+				}
+			}	
+		}
+		printf("\n");
+		printf("Insira 'remover' para remover o no.\n");
 	}
 }
