@@ -300,11 +300,13 @@ void *command() {
 	printf("\n\nSaindo do remover!\n");
 
 	for (int i = 0; i < 128; ++i) {
+		// printf("iteracao %d \n", i);
 		if (chaves[i]) {
 
 			int sock;
 			struct sockaddr_in server_addr;
-			char msg[MAX_MSG_LENGTH], reply[MAX_MSG_LENGTH];
+			char msg[MAX_MSG_LENGTH];
+			//char reply[MAX_MSG_LENGTH];
 
 			if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
 				perror("Nao foi possivel a criacao do socket!");
@@ -319,25 +321,25 @@ void *command() {
 				perror("Falha para conectar a uma porta via socket!");
 				return 0;
 			}
-		
+
 			memset(msg, 0, sizeof(msg));
-			sprintf(msg, "insere-no %u", i);
+			sprintf(msg, "adiciona-no %u", i);
 
 			if (send(sock, msg, MAX_MSG_LENGTH, 0) < 0) {
 			    perror("Falha no envio (send)!");
 			    return 0;
 			}
 
-			memset(reply, 0, sizeof(reply));
+			/*memset(reply, 0, sizeof(reply));
 			if (recv(sock, reply, MAX_MSG_LENGTH, 0) < 0) {
 				perror("Recv error: ");
 				return 0;
-			}
+			}*/
 
-			close(sock);
+			// close(sock);
 		}
 	}
-
+	sleep(9);
 	exit(0);
 }
 
@@ -612,13 +614,13 @@ void *chordNode(void *sock) {
 	        		return NULL;
 	    	   	}
     	   	}
-    	} /* else if (!strcmp(cmd, "adiciona-no")) {
+    	} else if (!strcmp(cmd, "adiciona-no")) {
     		printf("\nRecebendo adicao\n\n");
     		cmd = strtok(NULL, token);
     		result = atoi(cmd);
     		
     		chaves[get_hash(result)] = 1;
-    	}/ * else if (!strcmp(cmd, "elimina-no")) {
+    	}/* else if (!strcmp(cmd, "elimina-no")) {
     		printf("\nRecebendo eliminacao. \n\n");
     		cmd = strtok(NULL, token);
     		result = atoi(cmd);
