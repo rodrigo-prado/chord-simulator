@@ -4,26 +4,27 @@
 #define MAX_MSG_LENGTH 	2048
 #define MBITS 			7
 
-typedef struct _cNode * pcNode;
+typedef struct _cNode *pcNode;
 
-// pcNode suc;
-// pcNode suc2;
-// pcNode pre;
+pcNode suc;
+pcNode suc2;
+pcNode pre;
 
-//typedef struct _fingerTable {
-struct finger_table {
+typedef struct _fingerTable {
 	unsigned int start;
-	ft_node nodeInfo;
-} finger;
+	pcNode nodeInfo;
+} fTable;
 
-fTable fingerTable[MBITS+1];
+fTable fingerTable[MBITS];
 
-struct ft_node {
+typedef struct _cNode {
 	unsigned int key;
 	int port;
-};
+} cNode;
 
-cNode localNode;
+cNode node;
+
+int chaves[128];
 
 char *addr = "127.0.0.1";
 
